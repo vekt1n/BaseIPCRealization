@@ -6,17 +6,19 @@
 using namespace std;
 
 int main() {
+    Result res;
     BaseMemory writer("/writer_queue2");
     
     // Создаем соединение для себя
-    if (!writer.createConnection()) {
-        cout << "Failed to create connection" << endl;
+    res = writer.createConnection();
+    if (!res.result) {
+        cout << res.message << endl;
         return 1;
     }
-    
+    res = writer.openConnection("/reader_queue");
     // Открываем соединение с читателем
-    if (!writer.openConnection("/reader_queue")) {
-        cout << "Failed to open connection to reader" << endl;
+    if (!res.result) {
+        cout << res.message << endl;
         return 1;
     }
     
@@ -31,9 +33,9 @@ int main() {
             writer.sendMessage("exit");
             break;
         }
-        
-        if (!writer.sendMessage(input.c_str())) {
-            cout << "Failed to send message" << endl;
+        res = writer.sendMessage(input.c_str());
+        if (!res.result) {
+            cout << res.message << endl;
         } else {
             cout << "Sent: " << input << endl;
         }

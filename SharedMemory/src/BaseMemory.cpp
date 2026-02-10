@@ -8,6 +8,10 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 
+Result SuccessRessult() {
+    return Result(1, "Success");
+}
+
 // Конструктор
 BaseMemory::BaseMemory(const char* name) 
     : this_shm_fd(-1), this_queue(nullptr), 
@@ -16,12 +20,12 @@ BaseMemory::BaseMemory(const char* name)
     shm_name[sizeof(shm_name) - 1] = '\0';
 }
 
-bool BaseMemory::createConnection() {
+Result BaseMemory::createConnection() {
     // Создаем или открываем shared memory
     this_shm_fd = shm_open(shm_name, O_CREAT | O_RDWR, 0666);
     if (this_shm_fd == -1) {
         perror("shm_open");
-        return false;
+        return Result(0, "error shm_open");
     }
     
     // Устанавливаем размер
@@ -29,7 +33,8 @@ bool BaseMemory::createConnection() {
         close(this_shm_fd);
         shm_unlink(shm_name);
         perror("ftruncate");
-        return false;
+        return Result(0, "error ftruncate");
+
     }
     
     // Отображаем в память
@@ -40,8 +45,8 @@ bool BaseMemory::createConnection() {
     if (this_queue == MAP_FAILED) {
         close(this_shm_fd);
         shm_unlink(shm_name);
-        perror("mmap");
-        return false;
+        perror("mmap");        
+        return Result(0, "error mmap");
     }
 
     std::lock_guard<std::mutex> lock(init_mutex);
@@ -61,25 +66,24 @@ bool BaseMemory::createConnection() {
         this_queue->initialized = true;
     }
 
-    return true;
+    return SuccessRessult();
 }
 
 BaseMemory::~BaseMemory() {
     deleteConnection();
 }
 
-bool BaseMemory::sendMessage(const char* message) {
+Result BaseMemory::sendMessage(const char* message) {
     if (!send_queue || !message) {
-        return false;
+        return Result(0, "Has no send_queue or message");
     }
 
     // Блокируем для синхронизации писателей
     send_queue->send_mutex.lock();
     // Проверяем, есть ли место в очереди
     if (send_queue->message_count >= MAX_MESSAGES) {
-        std::cout << "Очередь переполнена, сообщение отброшено" << std::endl;
         pthread_mutex_unlock(&send_queue->write_mutex);
-        return false;
+        return Result(0, "Has no space for message. Message missed");
     }
 
     // Запоминаем текущую позицию для записи
@@ -102,14 +106,14 @@ bool BaseMemory::sendMessage(const char* message) {
     send_queue->message_count.fetch_add(1, std::memory_order_seq_cst);
     send_queue->send_mutex.unlock();
 
-    return true;
+    return SuccessRessult();
 }
 
-bool BaseMemory::openConnection(const char* name) {
+Result BaseMemory::openConnection(const char* name) {
     send_shm_fd = shm_open(name, O_RDWR, 0666);
     if (send_shm_fd == -1) {
         perror("shm_open");
-        return false;
+        return Result(0, "error shm_open");
     }
 
     // Отображаем в память
@@ -120,27 +124,27 @@ bool BaseMemory::openConnection(const char* name) {
     if (send_queue == MAP_FAILED) {
         close(send_shm_fd);
         perror("mmap");
-        return false;
+        return Result(0, "error mmap");
     }
     
     // Проверяем инициализацию
     if (!send_queue->initialized) {
         munmap(send_queue, SHM_SIZE);
         close(send_shm_fd);
-        std::cerr << "Shared memory not initialized by other process" << std::endl;
-        return false;
+        return Result(0, "Shared memory not initialized by other process");
     }
     
-    return true;
+    return SuccessRessult();
 }
 
-bool BaseMemory::closeConnection() {
-    bool success = true;
+Result BaseMemory::closeConnection() {
+    Result success = SuccessRessult();
 
     if (send_queue != nullptr) {
         if (munmap(send_queue, SHM_SIZE) == -1) {
             perror("munmap failed");
-            success = false;
+            success.result = false;
+            success.message = "munmap failed ";
         }
         send_queue = nullptr;
     }
@@ -148,7 +152,9 @@ bool BaseMemory::closeConnection() {
     if (send_shm_fd != -1) {
         if (close(send_shm_fd) == -1) {
             perror("close failed");
-            success = false;
+            if (success.result == false) success.message += ", close failed";
+            else success.message = "close failed";
+            success.result = false;
         }
         send_shm_fd = -1;
     }
@@ -157,9 +163,9 @@ bool BaseMemory::closeConnection() {
 }
 
 // Версия getMessage - читатель ОДИН, синхронизация не нужна
-bool BaseMemory::getMessage(Message& buffer) {
+Result BaseMemory::getMessage(Message& buffer) {
     if (!this_queue) {
-        return false;
+        return Result(0, "Has no this_queue");
     }
     
     // Проверяем, есть ли сообщения (атомарная операция)
@@ -167,7 +173,7 @@ bool BaseMemory::getMessage(Message& buffer) {
     if (this_queue->message_count.load(std::memory_order_seq_cst) <= 0) {
         buffer.message[0] = '\0';
         buffer.sender[0] = '\0';
-        return false;
+        return Result(0, "Has no Messages");
     }
     
     // Запоминаем текущую позицию для чтения
@@ -184,11 +190,11 @@ bool BaseMemory::getMessage(Message& buffer) {
     // Атомарно уменьшаем счетчик сообщений
     this_queue->message_count.fetch_sub(1, std::memory_order_seq_cst);
     
-    return true;
+    return SuccessRessult();
 }
 
-bool BaseMemory::deleteConnection() {
-    bool success = true;
+Result BaseMemory::deleteConnection() {
+    Result success = SuccessRessult();
     
     // Уничтожаем мьютекс перед удалением памяти
     if (this_queue != nullptr && this_queue->initialized) {
@@ -199,7 +205,8 @@ bool BaseMemory::deleteConnection() {
     if (this_queue != nullptr) {
         if (munmap(this_queue, SHM_SIZE) == -1) {
             perror("munmap failed");
-            success = false;
+            success.result = false;
+            success.message = "munmap failed";
         }
         this_queue = nullptr;
     }
@@ -207,7 +214,9 @@ bool BaseMemory::deleteConnection() {
     if (this_shm_fd != -1) {
         if (close(this_shm_fd) == -1) {
             perror("close failed");
-            success = false;
+            if (success.result == false) success.message += ", close failed";
+            else success.message = "close failed";
+            success.result = false;
         }
         this_shm_fd = -1;
     }
@@ -217,7 +226,9 @@ bool BaseMemory::deleteConnection() {
         // Это нормально, если память уже удалена другим процессом
         if (errno != ENOENT) {
             perror("shm_unlink failed");
-            success = false;
+            if (success.result == false) success.message += ", shm_unlink failed";
+            else success.message = "shm_unlink failed";
+            success.result = false;
         }
     }
     
@@ -228,9 +239,6 @@ bool BaseMemory::deleteConnection() {
 }
 
 bool BaseMemory::hasMessage() {
-    if (!this_queue) {
-        return false;
-    }
     // Атомарная проверка счетчика
     return this_queue->message_count.load(std::memory_order_seq_cst) > 0;
 }

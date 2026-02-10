@@ -15,8 +15,23 @@ struct Message {
     char sender[256];
 };
 
+struct Result {
+    bool result;
+    std::string message;
+
+    Result(bool res, std::string mess)
+        : result(res),
+          message(mess) {}
+    Result()
+        : result(0),
+          message("") {}
+};
+
+Result SuccessRessult();
+
 class BaseMemory {
 private:
+
     struct MessageForShm {
         char message[MESSAGE_SIZE];
         char sender[256];
@@ -45,13 +60,13 @@ public:
     BaseMemory(const char* name);
     ~BaseMemory();
     
-    bool createConnection();
-    bool openConnection(const char* name);
-    bool closeConnection();
-    bool deleteConnection();
+    Result createConnection();
+    Result openConnection(const char* name);
+    Result closeConnection();
+    Result deleteConnection();
     
-    bool sendMessage(const char* message);
-    bool getMessage(Message& buffer);
+    Result sendMessage(const char* message);
+    Result getMessage(Message& buffer);
     Message getMessage();  // Новая перегруженная версия
     bool hasMessage();
 

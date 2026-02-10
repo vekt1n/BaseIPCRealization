@@ -23,16 +23,20 @@ int main() {
     cout << "Writer started. Type messages (type 'exit' to quit):" << endl;
     
     string input;
-    int k = 0;
-    std::string message = "";
     while (true) {
-        k = writer.getK();
-        message = to_string(k);
-        const char* buf = message.data();
-        writer.sendMessage(buf);
-        cout << "Send mess \"" << k << "\"" << endl;
-        writer.sumK();
-        sleep(1);
+        cout << "> ";
+        getline(cin, input);
+        
+        if (input == "exit") {
+            writer.sendMessage("exit");
+            break;
+        }
+        
+        if (!writer.sendMessage(input.c_str())) {
+            cout << "Failed to send message" << endl;
+        } else {
+            cout << "Sent: " << input << endl;
+        }
     }
     
     writer.deleteConnection();

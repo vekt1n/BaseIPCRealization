@@ -8,11 +8,10 @@ int main() {
     BaseMemory reader("/reader_queue");
     reader.createConnection();
     while (true) {
+        Message message;
         if (reader.hasMessage()) {
-            cout << reader.getMessage() << endl;
-        }
-        else {
-            cout << "Has no Messages" << endl;
+            reader.getMessage(message);
+            cout << "Mess from " << message.sender << ": " << message.message << endl;
         }
         sleep(1);
     }

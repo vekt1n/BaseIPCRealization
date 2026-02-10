@@ -88,8 +88,11 @@ bool BaseMemory::sendMessage(const char* message) {
     // Копируем сообщение с безопасным ограничением длины
     size_t len = strlen(message);
     size_t copy_len = (len < MESSAGE_SIZE - 1) ? len : MESSAGE_SIZE - 1;
-    memcpy(send_queue->buffer[current_write_index], message, copy_len);
-    send_queue->buffer[current_write_index][copy_len] = '\0';
+    memcpy(send_queue->buffer[current_write_index].message, message, copy_len);
+    send_queue->buffer[current_write_index].message[copy_len] = '\0';
+    memcpy(send_queue->buffer[current_write_index].sender, shm_name, strlen(shm_name));
+    send_queue->buffer[current_write_index].sender[strlen(shm_name)] = '\0';
+    send_queue->buffer[current_write_index].is_read = false;
 
     // Обновляем индекс записи (только для писателей)
     send_queue->write_index = (current_write_index + 1) % MAX_MESSAGES;
@@ -154,15 +157,16 @@ bool BaseMemory::closeConnection() {
 }
 
 // Версия getMessage - читатель ОДИН, синхронизация не нужна
-bool BaseMemory::getMessage(char* buffer, size_t buffer_size) {
-    if (!this_queue || !buffer || buffer_size < MESSAGE_SIZE) {
+bool BaseMemory::getMessage(Message& buffer) {
+    if (!this_queue) {
         return false;
     }
     
     // Проверяем, есть ли сообщения (атомарная операция)
     // memory_order_seq_cst для гарантии порядка операций
     if (this_queue->message_count.load(std::memory_order_seq_cst) <= 0) {
-        buffer[0] = '\0';
+        buffer.message[0] = '\0';
+        buffer.sender[0] = '\0';
         return false;
     }
     
@@ -170,7 +174,9 @@ bool BaseMemory::getMessage(char* buffer, size_t buffer_size) {
     int current_read_index = this_queue->read_index;
     
     // Копируем сообщение
-    memcpy(buffer, this_queue->buffer[current_read_index], MESSAGE_SIZE);
+    memcpy(buffer.message, this_queue->buffer[current_read_index].message, MESSAGE_SIZE);
+    memcpy(buffer.sender, this_queue->buffer[current_read_index].sender, MESSAGE_SIZE);
+    this_queue->buffer[current_read_index].is_read = true;
     
     // Обновляем индекс чтения (только для читателя)
     this_queue->read_index = (current_read_index + 1) % MAX_MESSAGES;
@@ -179,16 +185,6 @@ bool BaseMemory::getMessage(char* buffer, size_t buffer_size) {
     this_queue->message_count.fetch_sub(1, std::memory_order_seq_cst);
     
     return true;
-}
-
-// Альтернативная версия getMessage, которая возвращает строку
-std::string BaseMemory::getMessage() {
-    std::string message;
-    char buffer[MESSAGE_SIZE];
-    if (getMessage(buffer, sizeof(buffer))) {
-        message = buffer;
-    }
-    return message;
 }
 
 bool BaseMemory::deleteConnection() {

@@ -18,6 +18,8 @@ BaseMemory::BaseMemory(const char* name)
       send_shm_fd(-1), send_queue(nullptr) {
     strncpy(shm_name, name, sizeof(shm_name) - 1);
     shm_name[sizeof(shm_name) - 1] = '\0';
+    checkMessages.read_index = 0;
+    checkMessages.write_index = 0;
 }
 
 Result BaseMemory::createConnection() {
@@ -97,13 +99,18 @@ Result BaseMemory::sendMessage(const char* message) {
     memcpy(send_queue->buffer[current_write_index].sender, shm_name, strlen(shm_name));
     send_queue->buffer[current_write_index].sender[strlen(shm_name)] = '\0';
     send_queue->buffer[current_write_index].is_read = false;
+    checkMessages.buffer[checkMessages.write_index] = &send_queue->buffer[current_write_index];
+    memcpy(checkMessages.reader[checkMessages.write_index], send_shm_name, strlen(send_shm_name));
+    checkMessages.time[checkMessages.write_index] = std::chrono::steady_clock::now();
 
     // Обновляем индекс записи (только для писателей)
     send_queue->write_index = (current_write_index + 1) % MAX_MESSAGES;
+    checkMessages.write_index = (checkMessages.write_index + 1) % MAX_MESSAGES;
 
     // Атомарно увеличиваем счетчик сообщений
     // memory_order_seq_cst для полной синхронизации между писателями и читателем
     send_queue->message_count.fetch_add(1, std::memory_order_seq_cst);
+    checkMessages.message_count.fetch_add(1, std::memory_order_seq_cst);
     send_queue->send_mutex.unlock();
 
     return SuccessRessult();
@@ -111,6 +118,8 @@ Result BaseMemory::sendMessage(const char* message) {
 
 Result BaseMemory::openConnection(const char* name) {
     send_shm_fd = shm_open(name, O_RDWR, 0666);
+    memcpy(send_shm_name, name, strlen(name));
+    send_shm_name[strlen(name)] = '\0';
     if (send_shm_fd == -1) {
         perror("shm_open");
         return Result(0, "error shm_open");
@@ -243,12 +252,26 @@ bool BaseMemory::hasMessage() {
     return this_queue->message_count.load(std::memory_order_seq_cst) > 0;
 }
 
-
-int BaseMemory::getK() {
-    return send_queue->k;
-}
-
-bool BaseMemory::sumK() {
-    ++send_queue->k;
-    return 1;
+Result BaseMemory::readOrNotMess() {
+    std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
+    Result res = SuccessRessult();
+    if (checkMessages.message_count > 0) {
+        if (std::chrono::duration_cast<std::chrono::seconds>(now - checkMessages.time[checkMessages.read_index]) 
+            >= std::chrono::seconds(5)) {
+                if (checkMessages.buffer[checkMessages.read_index]->is_read == false) {
+                    // std::string mess = "Message for \"";
+                    // mess += checkMessages.reader[checkMessages.read_index];
+                    // mess += "\": \"";
+                    // mess += checkMessages.buffer[checkMessages.read_index]->message;
+                    // mess += "\" is not read";
+                    std::string mess = checkMessages.reader[checkMessages.read_index];
+                    res = Result(0,  mess);
+                    return res;
+                }
+            checkMessages.read_index = (checkMessages.read_index + 1) % MAX_MESSAGES;
+            checkMessages.message_count.fetch_sub(1, std::memory_order_seq_cst);
+        }
+    }
+    
+    return res;
 }

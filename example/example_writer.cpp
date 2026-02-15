@@ -2,6 +2,7 @@
 #include <string>
 #include <unistd.h>  // Для sleep
 #include "../SharedMemory/include/BaseMemory.hpp"
+#include <thread>
 
 using namespace std;
 
@@ -26,19 +27,18 @@ int main() {
     
     string input;
     while (true) {
-        cout << "> ";
-        getline(cin, input);
-        
-        if (input == "exit") {
-            writer.sendMessage("exit");
-            break;
+        res = writer.sendMessage("Hello");
+        if (res.result == 1) {
+            cout << "Message send" << endl;
         }
-        res = writer.sendMessage(input.c_str());
-        if (!res.result) {
+        else {
+            cout << "Send fail" << endl;
+        }
+        res = writer.readOrNotMess();
+        if (res.result == 0) {
             cout << res.message << endl;
-        } else {
-            cout << "Sent: " << input << endl;
         }
+        this_thread::sleep_for(std::chrono::seconds(1));
     }
     
     writer.deleteConnection();

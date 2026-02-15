@@ -5,6 +5,7 @@
 #include <mutex>
 #include <pthread.h>
 #include <string>
+#include <chrono>   
 
 #define SHM_SIZE 30000
 #define MAX_MESSAGES 10
@@ -31,7 +32,6 @@ Result SuccessRessult();
 
 class BaseMemory {
 private:
-
     struct MessageForShm {
         char message[MESSAGE_SIZE];
         char sender[256];
@@ -49,12 +49,23 @@ private:
         std::mutex send_mutex;
     };
 
+    struct CheckMessage {
+        MessageForShm* buffer[MAX_MESSAGES];
+        std::chrono::steady_clock::time_point time[MAX_MESSAGES];
+        char reader[MAX_MESSAGES][256];
+        int write_index;
+        int read_index;
+        std::atomic<int> message_count;
+    };
+
     char shm_name[256];
+    char send_shm_name[256];
     int this_shm_fd;
     SharedQueue* this_queue;
     int send_shm_fd;
     SharedQueue* send_queue;
     std::mutex init_mutex;  // Только для локальной синхронизации создания
+    CheckMessage checkMessages;
 
 public:
     BaseMemory(const char* name);
@@ -69,9 +80,7 @@ public:
     Result getMessage(Message& buffer);
     Message getMessage();  // Новая перегруженная версия
     bool hasMessage();
-
-    int getK();
-    bool sumK();
+    Result readOrNotMess();
 };
 
 #endif // BASE_MEMORY_HPP

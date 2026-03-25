@@ -1,4 +1,4 @@
-#include "../include/BaseMemory.hpp"
+#include "BaseMemory.hpp"
 #include <cstring>
 #include <iostream>
 #include <mutex>
@@ -8,11 +8,6 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 
-Result SuccessRessult() {
-    return Result(1, "Success");
-}
-
-// Конструктор
 BaseMemory::BaseMemory(const char* name) 
     : this_shm_fd(-1), this_queue(nullptr), 
       send_shm_fd(-1), send_queue(nullptr) {
@@ -20,26 +15,23 @@ BaseMemory::BaseMemory(const char* name)
     shm_name[sizeof(shm_name) - 1] = '\0';
     checkMessages.read_index = 0;
     checkMessages.write_index = 0;
+    checkMessages.message_count = 0;
 }
 
 Result BaseMemory::createConnection() {
-    // Создаем или открываем shared memory
     this_shm_fd = shm_open(shm_name, O_CREAT | O_RDWR, 0666);
     if (this_shm_fd == -1) {
         perror("shm_open");
-        return Result(0, "error shm_open");
+        return Result(false, "error shm_open");
     }
     
-    // Устанавливаем размер
     if (ftruncate(this_shm_fd, SHM_SIZE) == -1) {
         close(this_shm_fd);
         shm_unlink(shm_name);
         perror("ftruncate");
-        return Result(0, "error ftruncate");
-
+        return Result(false, "error ftruncate");
     }
     
-    // Отображаем в память
     this_queue = static_cast<SharedQueue*>(
         mmap(0, SHM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, this_shm_fd, 0)
     );
@@ -48,17 +40,16 @@ Result BaseMemory::createConnection() {
         close(this_shm_fd);
         shm_unlink(shm_name);
         perror("mmap");        
-        return Result(0, "error mmap");
+        return Result(false, "error mmap");
     }
 
     std::lock_guard<std::mutex> lock(init_mutex);
-    if (!(this_queue->initialized)) {
+    if (!this_queue->initialized) {
         this_queue->write_index = 0;
         this_queue->read_index = 0;
         this_queue->message_count = 0;
         this_queue->k = 0;
         
-        // Инициализируем POSIX мьютекс для межпроцессной синхронизации писателей
         pthread_mutexattr_t mutex_attr;
         pthread_mutexattr_init(&mutex_attr);
         pthread_mutexattr_setpshared(&mutex_attr, PTHREAD_PROCESS_SHARED);
@@ -68,64 +59,88 @@ Result BaseMemory::createConnection() {
         this_queue->initialized = true;
     }
 
-    return SuccessRessult();
+    return SuccessResult;
 }
 
 BaseMemory::~BaseMemory() {
     deleteConnection();
 }
 
-Result BaseMemory::sendMessage(const char* message) {
-    if (!send_queue || !message) {
-        return Result(0, "Has no send_queue or message");
+Result BaseMemory::sendMessage(const Message& message) {
+    if (!send_queue) {
+        return Result(false, "Has no send_queue");
+    }
+    
+    if (message.message.empty()) {
+        return Result(false, "Message is empty");
     }
 
-    // Блокируем для синхронизации писателей
-    send_queue->send_mutex.lock();
-    // Проверяем, есть ли место в очереди
-    if (send_queue->message_count >= MAX_MESSAGES) {
+    pthread_mutex_lock(&send_queue->write_mutex);
+    
+    if (send_queue->message_count.load(std::memory_order_acquire) >= MAX_MESSAGES) {
         pthread_mutex_unlock(&send_queue->write_mutex);
-        return Result(0, "Has no space for message. Message missed");
+        return Result(false, "No space for message");
     }
 
-    // Запоминаем текущую позицию для записи
     int current_write_index = send_queue->write_index;
     
-    // Копируем сообщение с безопасным ограничением длины
-    size_t len = strlen(message);
-    size_t copy_len = (len < MESSAGE_SIZE - 1) ? len : MESSAGE_SIZE - 1;
-    memcpy(send_queue->buffer[current_write_index].message, message, copy_len);
-    send_queue->buffer[current_write_index].message[copy_len] = '\0';
-    memcpy(send_queue->buffer[current_write_index].sender, shm_name, strlen(shm_name));
-    send_queue->buffer[current_write_index].sender[strlen(shm_name)] = '\0';
+    strncpy(send_queue->buffer[current_write_index].message, 
+            message.message.c_str(), MESSAGE_SIZE - 1);
+    send_queue->buffer[current_write_index].message[MESSAGE_SIZE - 1] = '\0';
+    
+    strncpy(send_queue->buffer[current_write_index].sender, 
+            message.sender.c_str(), 255);
+    send_queue->buffer[current_write_index].sender[255] = '\0';
+    
+    strncpy(send_queue->buffer[current_write_index].tag, 
+            message.tag.c_str(), 255);
+    send_queue->buffer[current_write_index].tag[255] = '\0';
+    
     send_queue->buffer[current_write_index].is_read = false;
-    checkMessages.buffer[checkMessages.write_index] = &send_queue->buffer[current_write_index];
-    memcpy(checkMessages.reader[checkMessages.write_index], send_shm_name, strlen(send_shm_name));
-    checkMessages.time[checkMessages.write_index] = std::chrono::steady_clock::now();
+    
+    if (checkMessages.write_index < MAX_MESSAGES) {
+        checkMessages.buffer[checkMessages.write_index] = &send_queue->buffer[current_write_index];
+        strncpy(checkMessages.reader[checkMessages.write_index], send_shm_name, 255);
+        checkMessages.time[checkMessages.write_index] = std::chrono::steady_clock::now();
+    }
 
-    // Обновляем индекс записи (только для писателей)
     send_queue->write_index = (current_write_index + 1) % MAX_MESSAGES;
     checkMessages.write_index = (checkMessages.write_index + 1) % MAX_MESSAGES;
+    send_queue->message_count.fetch_add(1, std::memory_order_release);
+    checkMessages.message_count.fetch_add(1, std::memory_order_release);
+    
+    pthread_mutex_unlock(&send_queue->write_mutex);
 
-    // Атомарно увеличиваем счетчик сообщений
-    // memory_order_seq_cst для полной синхронизации между писателями и читателем
-    send_queue->message_count.fetch_add(1, std::memory_order_seq_cst);
-    checkMessages.message_count.fetch_add(1, std::memory_order_seq_cst);
-    send_queue->send_mutex.unlock();
+    return SuccessResult;
+}
 
-    return SuccessRessult();
+Result BaseMemory::sendMessage(const char* message) {
+    if (!send_queue || !message) {
+        return Result(false, "Has no send_queue or message is null");
+    }
+    
+    Message msg;
+    msg.message = message;
+    msg.sender = shm_name;
+    msg.tag = "direct";
+    
+    return sendMessage(msg);
+}
+
+Result BaseMemory::sendMessage(const std::string message) {
+    return sendMessage(message.c_str());
 }
 
 Result BaseMemory::openConnection(const char* name) {
     send_shm_fd = shm_open(name, O_RDWR, 0666);
-    memcpy(send_shm_name, name, strlen(name));
-    send_shm_name[strlen(name)] = '\0';
     if (send_shm_fd == -1) {
         perror("shm_open");
-        return Result(0, "error shm_open");
+        return Result(false, "error shm_open");
     }
+    
+    strncpy(send_shm_name, name, 255);
+    send_shm_name[255] = '\0';
 
-    // Отображаем в память
     send_queue = static_cast<SharedQueue*>(
         mmap(0, SHM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, send_shm_fd, 0)
     );
@@ -133,21 +148,20 @@ Result BaseMemory::openConnection(const char* name) {
     if (send_queue == MAP_FAILED) {
         close(send_shm_fd);
         perror("mmap");
-        return Result(0, "error mmap");
+        return Result(false, "error mmap");
     }
     
-    // Проверяем инициализацию
     if (!send_queue->initialized) {
         munmap(send_queue, SHM_SIZE);
         close(send_shm_fd);
-        return Result(0, "Shared memory not initialized by other process");
+        return Result(false, "Shared memory not initialized by other process");
     }
     
-    return SuccessRessult();
+    return SuccessResult;
 }
 
 Result BaseMemory::closeConnection() {
-    Result success = SuccessRessult();
+    Result success = SuccessResult;
 
     if (send_queue != nullptr) {
         if (munmap(send_queue, SHM_SIZE) == -1) {
@@ -161,56 +175,47 @@ Result BaseMemory::closeConnection() {
     if (send_shm_fd != -1) {
         if (close(send_shm_fd) == -1) {
             perror("close failed");
-            if (success.result == false) success.message += ", close failed";
+            if (!success.result) success.message += ", close failed";
             else success.message = "close failed";
             success.result = false;
         }
         send_shm_fd = -1;
     }
-
+    
+    memset(send_shm_name, 0, sizeof(send_shm_name));
+    
     return success;
 }
 
-// Версия getMessage - читатель ОДИН, синхронизация не нужна
 Result BaseMemory::getMessage(Message& buffer) {
     if (!this_queue) {
-        return Result(0, "Has no this_queue");
+        return Result(false, "Has no this_queue");
     }
     
-    // Проверяем, есть ли сообщения (атомарная операция)
-    // memory_order_seq_cst для гарантии порядка операций
-    if (this_queue->message_count.load(std::memory_order_seq_cst) <= 0) {
-        buffer.message[0] = '\0';
-        buffer.sender[0] = '\0';
-        return Result(0, "Has no Messages");
+    if (this_queue->message_count.load(std::memory_order_acquire) <= 0) {
+        return Result(false, "No messages");
     }
     
-    // Запоминаем текущую позицию для чтения
     int current_read_index = this_queue->read_index;
     
-    // Копируем сообщение
-    memcpy(buffer.message, this_queue->buffer[current_read_index].message, MESSAGE_SIZE);
-    memcpy(buffer.sender, this_queue->buffer[current_read_index].sender, MESSAGE_SIZE);
+    buffer.message = this_queue->buffer[current_read_index].message;
+    buffer.sender = this_queue->buffer[current_read_index].sender;
+    buffer.tag = this_queue->buffer[current_read_index].tag;
     this_queue->buffer[current_read_index].is_read = true;
     
-    // Обновляем индекс чтения (только для читателя)
     this_queue->read_index = (current_read_index + 1) % MAX_MESSAGES;
+    this_queue->message_count.fetch_sub(1, std::memory_order_release);
     
-    // Атомарно уменьшаем счетчик сообщений
-    this_queue->message_count.fetch_sub(1, std::memory_order_seq_cst);
-    
-    return SuccessRessult();
+    return SuccessResult;
 }
 
 Result BaseMemory::deleteConnection() {
-    Result success = SuccessRessult();
+    Result success = SuccessResult;
     
-    // Уничтожаем мьютекс перед удалением памяти
     if (this_queue != nullptr && this_queue->initialized) {
         pthread_mutex_destroy(&this_queue->write_mutex);
     }
     
-    // Освобождаем свою очередь
     if (this_queue != nullptr) {
         if (munmap(this_queue, SHM_SIZE) == -1) {
             perror("munmap failed");
@@ -223,55 +228,99 @@ Result BaseMemory::deleteConnection() {
     if (this_shm_fd != -1) {
         if (close(this_shm_fd) == -1) {
             perror("close failed");
-            if (success.result == false) success.message += ", close failed";
+            if (!success.result) success.message += ", close failed";
             else success.message = "close failed";
             success.result = false;
         }
         this_shm_fd = -1;
     }
     
-    // Удаляем разделяемую память
     if (shm_unlink(shm_name) == -1) {
-        // Это нормально, если память уже удалена другим процессом
         if (errno != ENOENT) {
             perror("shm_unlink failed");
-            if (success.result == false) success.message += ", shm_unlink failed";
+            if (!success.result) success.message += ", shm_unlink failed";
             else success.message = "shm_unlink failed";
             success.result = false;
         }
     }
     
-    // Также закрываем соединение для отправки, если оно открыто
     closeConnection();
     
     return success;
 }
 
 bool BaseMemory::hasMessage() {
-    // Атомарная проверка счетчика
-    return this_queue->message_count.load(std::memory_order_seq_cst) > 0;
+    if (!this_queue) return false;
+    return this_queue->message_count.load(std::memory_order_acquire) > 0;
+}
+
+bool BaseMemory::hasSpace() {
+    if (!send_queue) return false;
+    return send_queue->message_count.load(std::memory_order_acquire) < MAX_MESSAGES;
 }
 
 Result BaseMemory::readOrNotMess() {
     std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
-    Result res = SuccessRessult();
-    if (checkMessages.message_count > 0) {
-        if (std::chrono::duration_cast<std::chrono::seconds>(now - checkMessages.time[checkMessages.read_index]) 
+    
+    if (checkMessages.message_count.load(std::memory_order_acquire) > 0) {
+        int current_read = checkMessages.read_index;
+        
+        if (std::chrono::duration_cast<std::chrono::seconds>(now - checkMessages.time[current_read]) 
             >= std::chrono::seconds(5)) {
-                if (checkMessages.buffer[checkMessages.read_index]->is_read == false) {
-                    // std::string mess = "Message for \"";
-                    // mess += checkMessages.reader[checkMessages.read_index];
-                    // mess += "\": \"";
-                    // mess += checkMessages.buffer[checkMessages.read_index]->message;
-                    // mess += "\" is not read";
-                    std::string mess = checkMessages.reader[checkMessages.read_index];
-                    res = Result(0,  mess);
-                    return res;
-                }
+            
+            if (checkMessages.buffer[current_read] && 
+                !checkMessages.buffer[current_read]->is_read) {
+                std::string mess = checkMessages.reader[current_read];
+                mess += " did not read message: ";
+                mess += checkMessages.buffer[current_read]->message;
+                return Result(false, mess);
+            }
+            
             checkMessages.read_index = (checkMessages.read_index + 1) % MAX_MESSAGES;
-            checkMessages.message_count.fetch_sub(1, std::memory_order_seq_cst);
+            checkMessages.message_count.fetch_sub(1, std::memory_order_release);
         }
     }
     
-    return res;
+    return SuccessResult;
+}
+
+Result BaseMemory::publishMessage(const char* message, const char* tag) {
+    if (!message || !tag) {
+        return Result(false, "Invalid parameters");
+    }
+    
+    Message mess;
+    mess.message = message;
+    mess.sender = shm_name;
+    mess.tag = tag;
+    
+    Result res = openConnection("/adapter");
+    if (!res.result) {
+        return res;
+    }
+
+    if (send_queue->message_count.load(std::memory_order_acquire) >= MAX_MESSAGES) {
+        return Result(false, "Has No Enough Space");
+    }
+
+    res = sendMessage(mess);
+    if (!res.result) {
+        closeConnection();
+        return res;
+    }
+
+    closeConnection();
+    return SuccessResult;
+}
+
+Result BaseMemory::publishMessage(const std::string message, const char* tag) {
+    return publishMessage(message.c_str(), tag);
+}
+
+Result BaseMemory::publishMessage(const char* message, const std::string tag) {
+    return publishMessage(message, tag.c_str());
+}
+
+Result BaseMemory::publishMessage(const std::string message, const std::string tag) {
+    return publishMessage(message.c_str(), tag.c_str());
 }

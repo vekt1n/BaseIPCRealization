@@ -7,13 +7,14 @@
 #include <string>
 #include <chrono>   
 
-#define SHM_SIZE 30000
+#define SHM_SIZE 60000
 #define MAX_MESSAGES 10
 #define MESSAGE_SIZE 256
 
 struct Message {
-    char message[MESSAGE_SIZE];
-    char sender[256];
+    std::string message;
+    std::string sender;
+    std::string tag;
 };
 
 struct Result {
@@ -24,29 +25,27 @@ struct Result {
         : result(res),
           message(mess) {}
     Result()
-        : result(0),
+        : result(false),
           message("") {}
 };
-
-Result SuccessRessult();
 
 class BaseMemory {
 private:
     struct MessageForShm {
         char message[MESSAGE_SIZE];
         char sender[256];
+        char tag[256];
         bool is_read;
     };
 
     struct SharedQueue {
-        std::atomic<int> message_count;  // Атомарный счетчик сообщений
-        int write_index;                 // Индекс для записи (только для писателей)
-        int read_index;                  // Индекс для чтения (только для читателя)
+        std::atomic<int> message_count;
+        int write_index;
+        int read_index;
         int k;
-        bool initialized;                // Флаг инициализации
-        MessageForShm buffer[MAX_MESSAGES];    // Буфер сообщений
-        pthread_mutex_t write_mutex;     // Мьютекс для синхронизации писателей
-        std::mutex send_mutex;
+        bool initialized;
+        MessageForShm buffer[MAX_MESSAGES];
+        pthread_mutex_t write_mutex;
     };
 
     struct CheckMessage {
@@ -64,8 +63,10 @@ private:
     SharedQueue* this_queue;
     int send_shm_fd;
     SharedQueue* send_queue;
-    std::mutex init_mutex;  // Только для локальной синхронизации создания
+    std::mutex init_mutex;
     CheckMessage checkMessages;
+
+    Result SuccessResult = {true, "Success"};
 
 public:
     BaseMemory(const char* name);
@@ -75,11 +76,17 @@ public:
     Result openConnection(const char* name);
     Result closeConnection();
     Result deleteConnection();
+    Result sendMessage(const Message& message);
     
     Result sendMessage(const char* message);
+    Result sendMessage(const std::string message);
+    Result publishMessage(const char* message, const char* tag);
+    Result publishMessage(const std::string message, const char* tag);
+    Result publishMessage(const char* message, const std::string tag);
+    Result publishMessage(const std::string message, const std::string tag);
     Result getMessage(Message& buffer);
-    Message getMessage();  // Новая перегруженная версия
     bool hasMessage();
+    bool hasSpace();
     Result readOrNotMess();
 };
 

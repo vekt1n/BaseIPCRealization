@@ -27,13 +27,16 @@ int main() {
     
     string input;
     while (true) {
-        res = writer.sendMessage("Hello");
-        if (res.result == 1) {
-            cout << "Message send" << endl;
+        if (writer.hasSpace()) {
+            res = writer.sendMessage("Hello");
+            if (res.result == 1) {
+                cout << "Message send" << endl;
+            }
+            else {
+                cout << "Send fail" << endl;
+            }
         }
-        else {
-            cout << "Send fail" << endl;
-        }
+        
         res = writer.readOrNotMess();
         if (res.result == 0) {
             cout << res.message << endl;

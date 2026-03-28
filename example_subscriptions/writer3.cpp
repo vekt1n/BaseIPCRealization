@@ -1,7 +1,7 @@
 #include <iostream>
 #include <string>
 #include <unistd.h>
-#include "BaseMemory.hpp"
+#include "../SharedMemory/include/BaseMemory.hpp"
 #include <thread>
 
 using namespace std;

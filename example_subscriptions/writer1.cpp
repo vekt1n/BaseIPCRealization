@@ -4,7 +4,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdlib>
-#include "BaseMemory.hpp"
+#include "../SharedMemory/include/BaseMemory.hpp"
 
 using namespace std;
 

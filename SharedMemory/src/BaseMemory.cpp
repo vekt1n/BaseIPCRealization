@@ -284,6 +284,43 @@ Result BaseMemory::readOrNotMess() {
     return SuccessResult;
 }
 
+Result BaseMemory::sendMessage(const char* send_for, const char* message) {
+    if (!send_for || !message) {
+        return Result(false, "Invalid parameters");
+    }
+    
+    Result res = openConnection(send_for);
+    if (!res.result) {
+        return res;
+    }
+    
+    if (!hasSpace()) {
+        closeConnection();
+        return Result(false, "Has No Enough space");
+    }
+    
+    res = sendMessage(message);
+    if (!res.result) {
+        closeConnection();
+        return res;
+    }
+    
+    closeConnection();
+    return SuccessResult;
+}
+
+Result BaseMemory::sendMessage(const std::string send_for, const char* message) {
+    return sendMessage(send_for.c_str(), message);
+}
+
+Result BaseMemory::sendMessage(const char* send_for, const std::string message) {
+    return sendMessage(send_for, message.c_str());
+}
+
+Result BaseMemory::sendMessage(const std::string send_for, const std::string message) {
+    return sendMessage(send_for.c_str(), message.c_str());
+}
+
 Result BaseMemory::publishMessage(const char* message, const char* tag) {
     if (!message || !tag) {
         return Result(false, "Invalid parameters");
@@ -300,6 +337,7 @@ Result BaseMemory::publishMessage(const char* message, const char* tag) {
     }
 
     if (send_queue->message_count.load(std::memory_order_acquire) >= MAX_MESSAGES) {
+        closeConnection();
         return Result(false, "Has No Enough Space");
     }
 
@@ -323,37 +361,4 @@ Result BaseMemory::publishMessage(const char* message, const std::string tag) {
 
 Result BaseMemory::publishMessage(const std::string message, const std::string tag) {
     return publishMessage(message.c_str(), tag.c_str());
-}
-
-Result BaseMemory::sendMessage(const char* send_for, const char* message) {
-    Result res;
-    res = openConnection(send_for);
-    if (!res.result) {
-        return res;
-    }
-    if (hasSpace()) {
-        res = sendMessage(message);
-    }
-    else {
-        return Result(false, "Has No Enough space");
-    }
-
-    if (!res.result) {
-        return res;
-    }
-    closeConnection();
-
-    return SuccessResult;
-}
-
-Result BaseMemory::sendMessage(const std::string send_for, const char* message) {
-    return sendMessage(send_for.c_str(), message);
-}
-
-Result BaseMemory::sendMessage(const char* send_for, const std::string message) {
-    return sendMessage(send_for, message.c_str());
-}
-
-Result BaseMemory::sendMessage(const std::string send_for, const std::string message) {
-    return sendMessage(send_for.c_str(), message.c_str());
 }

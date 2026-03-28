@@ -80,6 +80,10 @@ public:
     
     Result sendMessage(const char* message);
     Result sendMessage(const std::string message);
+    Result sendMessage(const char* send_for, const char* message);
+    Result sendMessage(const std::string send_for, const char* message);
+    Result sendMessage(const char* send_for, const std::string message);
+    Result sendMessage(const std::string send_for, const std::string message);
     Result publishMessage(const char* message, const char* tag);
     Result publishMessage(const std::string message, const char* tag);
     Result publishMessage(const char* message, const std::string tag);

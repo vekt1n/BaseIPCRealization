@@ -4,7 +4,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdlib>
-#include "../SharedMemory/include/BaseMemory.hpp"
+#include "BaseMemory.hpp"
 
 using namespace std;
 
@@ -30,14 +30,6 @@ int main(int argc, char* argv[]) {
     }
     cout << "Connection created successfully" << endl;
 
-    res = memory.openConnection("/adapter");
-    if (!res.result) {
-        cout << "Failed to open connection to /adapter: " << res.message << endl;
-        memory.deleteConnection();
-        return 1;
-    }
-    cout << "Opened connection to /adapter successfully" << endl;
-
     atomic<bool> running(true);
 
     thread receiver([&memory, &running]() {
@@ -60,29 +52,31 @@ int main(int argc, char* argv[]) {
     cout << "Dual-thread messenger started." << endl;
     cout << "Type messages and press Enter to send." << endl;
     cout << "Type 'exit' to quit." << endl;
-    cout << "> ";
+    cout << "who?> ";
     cout.flush();
-
+    string send_to;
+    string message;
     string input;
     while (running) {
-        getline(cin, input);
-        if (input == "exit") {
+        getline(cin, send_to);
+        cout << "mess?> ";
+        cout.flush();
+        getline(cin, message);
+        if (send_to == "exit" || message == "exit") {
             running = false;
             break;
         }
-        if (!input.empty()) {
-            if (memory.hasSpace()) {
-                res = memory.sendMessage(input);
-                if (res.result) {
-                    cout << "[SENT] " << input << endl;
-                } else {
-                    cerr << "Send failed: " << res.message << endl;
-                }
+        cout << send_to << ' ' << message << endl;
+        cout.flush();
+        if (!send_to.empty() && !message.empty()) {
+            res = memory.sendMessage(send_to, message);
+            if (res.result) {
+                cout << "[SENT] " << input << endl; 
             } else {
-                cerr << "No space in queue, message not sent." << endl;
+                cerr << "Send failed: " << res.message << endl;
             }
         }
-        cout << "> ";
+        cout << "who?> ";
         cout.flush();
     }
 

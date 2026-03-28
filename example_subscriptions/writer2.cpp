@@ -1,60 +1,78 @@
 #include <iostream>
 #include <string>
-#include <unistd.h>
-#include "../SharedMemory/include/BaseMemory.hpp"
 #include <thread>
+#include <atomic>
+#include <chrono>
+#include <cstdlib>
+#include "BaseMemory.hpp"
 
 using namespace std;
 
-int main() {
+int main(int argc, char* argv[]) {
+    BaseMemory memory("/writer2");
     Result res;
-    BaseMemory writer("/writer_queue1");
-    
-    res = writer.createConnection();
+
+    res = memory.createConnection();
     if (!res.result) {
         cout << "Failed to create connection: " << res.message << endl;
         return 1;
     }
     cout << "Connection created successfully" << endl;
-    
-    // res = writer.openConnection("/adapter");
-    // if (!res.result) {
-    //     cout << "Failed to open connection to /adapter: " << res.message << endl;
-    //     writer.deleteConnection();
-    //     return 1;
-    // }
-    // cout << "Opened connection to /adapter successfully" << endl;
-    
-    cout << "Writer started. Sending messages every second..." << endl;
-    
-    int message_count = 0;
-    while (message_count < 5) {
-        if (true) {
-            // Message mess;
-            // mess.message = "Hello from writer2 - message #" + to_string(message_count + 1);
-            // mess.tag = "tag1";
-            // mess.sender = "writer2";
-            
-            res = writer.publishMessage("Hello world", "tag1");
-            if (res.result) {
-                cout << "Message #" << (message_count + 1) << " sent successfully" << endl;
-                message_count++;
-            } else {
-                cout << "Send failed: " << res.message << endl;
+
+    atomic<bool> running(true);
+
+    thread receiver([&memory, &running]() {
+        while (running) {
+            if (memory.hasMessage()) {
+                Message msg;
+                Result res = memory.getMessage(msg);
+                if (res.result) {
+                    cout << "\n[RECEIVED from " << msg.sender << "]: " << msg.message << endl;
+                    cout << "> ";
+                    cout.flush();
+                } else {
+                    cerr << "Error receiving message: " << res.message << endl;
+                }
             }
-        } else {
-            cout << "No space in queue, waiting..." << endl;
+            this_thread::sleep_for(chrono::milliseconds(10));
         }
-        
-        res = writer.readOrNotMess();
-        if (!res.result) {
-            cout << "Read notification: " << res.message << endl;
+    });
+
+    cout << "Dual-thread messenger started." << endl;
+    cout << "Type messages and press Enter to send." << endl;
+    cout << "Type 'exit' to quit." << endl;
+    cout << "who?> ";
+    cout.flush();
+    string send_to;
+    string message;
+    string input;
+    while (running) {
+        getline(cin, send_to);
+        cout << "mess?> ";
+        cout.flush();
+        getline(cin, message);
+        if (send_to == "exit" || message == "exit") {
+            running = false;
+            break;
         }
-        
-        this_thread::sleep_for(std::chrono::seconds(1));
+        cout << send_to << ' ' << message << endl;
+        cout.flush();
+        if (!send_to.empty() && !message.empty()) {
+            res = memory.sendMessage(send_to, message);
+            if (res.result) {
+                cout << "[SENT] " << input << endl; 
+            } else {
+                cerr << "Send failed: " << res.message << endl;
+            }
+        }
+        cout << "who?> ";
+        cout.flush();
     }
-    
-    cout << "Finished sending 5 messages" << endl;
-    writer.deleteConnection();
+
+    if (receiver.joinable())
+        receiver.join();
+
+    memory.deleteConnection();
+    cout << "Exiting." << endl;
     return 0;
 }

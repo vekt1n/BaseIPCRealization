@@ -27,8 +27,9 @@ int main(int argc, char* argv[]) {
                 Message msg;
                 Result res = memory.getMessage(msg);
                 if (res.result) {
-                    cout << "\n[RECEIVED from " << msg.sender << "]: " << msg.message << endl;
-                    cout << "> ";
+                    cout << "\n[RECEIVED from " << msg.sender
+                    << " with tag \'" << msg.tag << "]: " << msg.message << endl;
+                    cout << "who?> ";
                     cout.flush();
                 } else {
                     cerr << "Error receiving message: " << res.message << endl;

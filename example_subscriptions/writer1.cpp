@@ -9,17 +9,6 @@
 using namespace std;
 
 int main(int argc, char* argv[]) {
-    string my_queue = "/myapp_queue";
-    string other_queue = "/otherapp_queue";
-
-    if (argc >= 3) {
-        my_queue = argv[1];
-        other_queue = argv[2];
-    } else {
-        cout << "Usage: " << argv[0] << " <my_queue> <other_queue>" << endl;
-        cout << "Using default queues: " << my_queue << " and " << other_queue << endl;
-    }
-
     BaseMemory memory("/writer1");
     Result res;
 
@@ -38,8 +27,9 @@ int main(int argc, char* argv[]) {
                 Message msg;
                 Result res = memory.getMessage(msg);
                 if (res.result) {
-                    cout << "\n[RECEIVED from " << msg.sender << "]: " << msg.message << endl;
-                    cout << "> ";
+                    cout << "\n[RECEIVED from " << msg.sender
+                    << " with tag \'" << msg.tag << "]: " << msg.message << endl;
+                    cout << "who?> ";
                     cout.flush();
                 } else {
                     cerr << "Error receiving message: " << res.message << endl;

@@ -54,6 +54,17 @@
 - Для сообщений с другими тегами рассылает их всем подписчикам на соответствующий тег, открывая временное соединение с каждым подписчиком через `BaseMemory::openConnection()`.
 - Поддерживает запуск в foreground (с выводом в консоль) или как демон (с использованием `Daemonizer`), обрабатывает сигналы для корректного завершения.
 
+### ipc_manager.cpp
+
+`ipc_manager.cpp` – утилита командной строки для управления демонами IPC (adapter, logger, reader, writer1, writer2). Основные возможности:
+
+- **Запуск/остановка** отдельных демонов или всех (`start`/`stop`), с учётом корректного порядка (adapter → logger → reader → writers, обратный при остановке).
+- **Рестарт** указанного демона.
+- **Проверка статуса** (`status`) с отображением PID, uptime, детали из `/proc`.
+- **Очистка ресурсов** (`cleanup`) – удаление PID-файлов, очередей и разделяемой памяти.
+- Использует `system()` для запуска демонов с аргументами (`--foreground`, `--pid-file`), проверяет существование процесса через `kill(pid, 0)`.
+- Хранит информацию о демонах в `std::map`, пути к PID-файлам, аргументы по умолчанию, задержки при запуске.
+
 ## Требования
 
 - Компилятор с поддержкой **C++20** (g++).
@@ -88,14 +99,33 @@ make
 
 ### Запуск демонов (фоновый режим)
 
-После сборки демоны запускаются в фоновом режиме (по умолчанию). Для этого просто выполните:
+После сборки демоны запускаются в фоновом режиме. Для этого используйте ipc_manager:
+```bash
+./build/ipc_manager # <=> help
+```
+
+получите такой вывод
 
 ```bash
-./build/reader_daemon
-./build/writer1_daemon
-./build/writer2_daemon
-./build/logger_daemon
-./build/adapter
+IPC Manager - Control IPC daemons with Subscription Adapter
+Usage: ipc_manager <command> [daemon] [options]
+
+Commands:
+  start [daemon]    Start daemon (or all if no daemon specified)
+  stop [daemon]     Stop daemon (or all if no daemon specified)
+  restart <daemon>  Restart specific daemon
+  status [-d]       Show status of all daemons (-d for details)
+  cleanup           Clean up shared memory and PID files
+  help              Show this help
+
+Daemons: adapter, logger, reader, writer1, writer2, all
+
+Examples:
+  ipc_manager start            # Start all daemons
+  ipc_manager stop             # Stop all daemons
+  ipc_manager start adapter    # Start only adapter
+  ipc_manager status           # Show status
+  ipc_manager status -d        # Show detailed status
 ```
 
 Демоны самостоятельно создают необходимые IPC-объекты (очереди, разделяемую память).

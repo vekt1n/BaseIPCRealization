@@ -92,7 +92,7 @@ int main(int argc, char* argv[]) {
     signal(SIGINT, logger_signal_handler);
     
     // Создаем свою очередь для получения сообщений
-    BaseMemory logger_queue("/logger_queue");
+    BaseMemory logger_queue("/logger_daemon_queue");
     Result res = logger_queue.createConnection();
     if (!res.result) {
         std::cerr << "Failed to create logger queue: " << res.message << std::endl;

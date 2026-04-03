@@ -61,7 +61,7 @@ int main(int argc, char* argv[]) {
     signal(SIGINT, writer2_signal_handler);
     
     // Создаем свою очередь
-    BaseMemory writer("/writer_queue2");
+    BaseMemory writer("/writer_daemon_queue2");
     Result res = writer.createConnection();
     if (!res.result) {
         std::cerr << "Failed to create writer2 queue: " << res.message << std::endl;

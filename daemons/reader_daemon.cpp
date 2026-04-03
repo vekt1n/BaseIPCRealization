@@ -56,7 +56,7 @@ int main(int argc, char* argv[]) {
     signal(SIGINT, reader_signal_handler);
     
     // Создаем свою очередь для чтения
-    BaseMemory reader("/reader_queue");
+    BaseMemory reader("/reader_daemon_queue");
     Result res = reader.createConnection();
     if (!res.result) {
         std::cerr << "Failed to create reader queue: " << res.message << std::endl;

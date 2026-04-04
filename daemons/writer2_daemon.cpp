@@ -1,5 +1,6 @@
 #include "../SharedMemory/include/BaseMemory.hpp"
 #include "../SharedMemory/include/Daemonizer.hpp"
+#include "../SharedMemory/include/Logger.h"
 #include <iostream>
 #include <csignal>
 #include <unistd.h>
@@ -60,11 +61,15 @@ int main(int argc, char* argv[]) {
     signal(SIGTERM, writer2_signal_handler);
     signal(SIGINT, writer2_signal_handler);
     
+    // Создаём локальный логгер
+    Logger logger(500, LogLevel::DEBUG, "/tmp/writer2.log");
+    logger.setOutputMode(/*file=*/true, /*console=*/foreground_mode);
+    
     // Создаем свою очередь
     BaseMemory writer("/writer_daemon_queue2");
     Result res = writer.createConnection();
     if (!res.result) {
-        std::cerr << "Failed to create writer2 queue: " << res.message << std::endl;
+        logger.log(LogLevel::ERROR, "Writer2", "Failed to create writer2 queue: " + res.message);
         Daemonizer::cleanupPidFile(pid_file);
         return 1;
     }
@@ -95,11 +100,13 @@ int main(int argc, char* argv[]) {
         
         if (!res.result && foreground_mode) {
             std::cerr << "Failed to publish message: " << res.message << std::endl;
+            logger.log(LogLevel::ERROR, "Writer2", "Failed to publish: " + res.message);
         } else if (foreground_mode) {
             std::cout << "Published [" << publish_tag << "]: " << message_str << std::endl;
         }
         
-        // Также отправляем лог
+        // Логируем локально и отправляем в централизованный логгер
+        logger.log(LogLevel::INFO, "Writer2", message_str);
         writer.publishMessage(message_str, "log");
         
         // Ждем указанный интервал
@@ -109,6 +116,7 @@ int main(int argc, char* argv[]) {
     }
     
     // Отправляем финальное сообщение
+    logger.log(LogLevel::INFO, "Writer2", "Writer2 shutting down");
     writer.publishMessage("Writer2 shutting down", publish_tag);
     writer.publishMessage("Writer2 shutting down", "log");
     

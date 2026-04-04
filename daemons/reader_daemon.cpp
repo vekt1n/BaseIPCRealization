@@ -1,5 +1,6 @@
 #include "../SharedMemory/include/BaseMemory.hpp"
 #include "../SharedMemory/include/Daemonizer.hpp"
+#include "../SharedMemory/include/Logger.h"
 #include <iostream>
 #include <csignal>
 #include <unistd.h>
@@ -55,11 +56,15 @@ int main(int argc, char* argv[]) {
     signal(SIGTERM, reader_signal_handler);
     signal(SIGINT, reader_signal_handler);
     
+    // Создаём локальный логгер
+    Logger logger(500, LogLevel::DEBUG, "/tmp/reader.log");
+    logger.setOutputMode(/*file=*/true, /*console=*/foreground_mode);
+    
     // Создаем свою очередь для чтения
     BaseMemory reader("/reader_daemon_queue");
     Result res = reader.createConnection();
     if (!res.result) {
-        std::cerr << "Failed to create reader queue: " << res.message << std::endl;
+        logger.log(LogLevel::ERROR, "Reader", "Failed to create reader queue: " + res.message);
         Daemonizer::cleanupPidFile(pid_file);
         return 1;
     }
@@ -67,7 +72,7 @@ int main(int argc, char* argv[]) {
     // Подписываемся на нужный тег через Adapter
     res = reader.openConnection("/adapter");
     if (!res.result) {
-        std::cerr << "Failed to connect to adapter: " << res.message << std::endl;
+        logger.log(LogLevel::ERROR, "Reader", "Failed to connect to adapter: " + res.message);
         Daemonizer::cleanupPidFile(pid_file);
         return 1;
     }
@@ -94,7 +99,10 @@ int main(int argc, char* argv[]) {
                               << msg.message << std::endl;
                 }
                 
-                // Пересылаем в логгер через publishMessage
+                // Логируем локально
+                logger.log(LogLevel::INFO, msg.sender, msg.message);
+                
+                // Пересылаем в централизованный логгер через publishMessage
                 reader.publishMessage(
                     ("Received from " + msg.sender + ": " + msg.message),
                     "log"

@@ -125,29 +125,29 @@ clean_all: clean free_mem
 # ========================
 # Запуск в foreground (для отладки)
 # ========================
-run_adapter_fg: adapter
+run_adapter_fg: ./build/adapter
 	$(BUILD_DIR)/adapter --foreground
 
-run_reader_daemon_fg: reader_daemon
+run_reader_daemon_fg: ./build/reader_daemon
 	$(BUILD_DIR)/reader_daemon --foreground
 
-run_writer1_daemon_fg: writer1_daemon
+run_writer1_daemon_fg: ./build/writer1_daemon
 	$(BUILD_DIR)/writer1_daemon --foreground
 
-run_writer2_daemon_fg: writer2_daemon
+run_writer2_daemon_fg: ./build/writer2_daemon
 	$(BUILD_DIR)/writer2_daemon --foreground
 
-run_logger_daemon_fg: logger_daemon
+run_logger_daemon_fg: ./build/logger_daemon
 	$(BUILD_DIR)/logger_daemon --foreground --log-file ./test.log
 
 # Запуск примеров
-run_reader_example: reader_example
+run_reader_example: ./build/reader_example
 	$(BUILD_DIR)/reader_example
 
-run_writer1_example: writer1_example
+run_writer1_example: ./build/writer1_example
 	$(BUILD_DIR)/writer1_example
 
-run_writer2_example: writer2_example
+run_writer2_example: ./build/writer2_example
 	$(BUILD_DIR)/writer2_example
 
 # Установка

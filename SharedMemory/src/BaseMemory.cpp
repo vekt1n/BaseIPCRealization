@@ -336,7 +336,7 @@ Result BaseMemory::publishMessage(const char* message, const char* tag) {
         return res;
     }
 
-    if (send_queue->message_count.load(std::memory_order_acquire) >= MAX_MESSAGES) {
+    if (!hasSpace()) {
         closeConnection();
         return Result(false, "Has No Enough Space");
     }

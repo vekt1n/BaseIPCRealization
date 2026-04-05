@@ -100,6 +100,7 @@ int main(int argc, char* argv[]) {
     } else {
         // Подписываемся на логи всех уровней
         logger_queue.sendMessage("sub_to log");
+        logger_queue.sendMessage("sub_to info");
         logger_queue.sendMessage("sub_to error");
         logger_queue.sendMessage("sub_to fatal");
         logger_queue.sendMessage("sub_to warn");
@@ -143,6 +144,7 @@ int main(int argc, char* argv[]) {
     res = logger_queue.openConnection("/adapter");
     if (res.result) {
         logger_queue.sendMessage("unsub_to log");
+        logger_queue.sendMessage("unsub_to info");
         logger_queue.sendMessage("unsub_to error");
         logger_queue.sendMessage("unsub_to fatal");
         logger_queue.sendMessage("unsub_to warn");

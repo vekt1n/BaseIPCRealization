@@ -13,7 +13,7 @@ DAEMONIZER_SRC = $(SRC_DIR)/Daemonizer.cpp
 LOGGER_SRC = $(SRC_DIR)/Logger.cpp
 
 # Демоны
-ADAPTER_SRC = ./SubscriptionAdapter/Adapter.cpp
+SUBS_SRC = ./MessageBussSubscribtions/SubscribtionsBuss.cpp
 READER_DAEMON_SRC = $(DAEMONS_DIR)/reader_daemon.cpp
 WRITER1_DAEMON_SRC = $(DAEMONS_DIR)/writer1_daemon.cpp
 WRITER2_DAEMON_SRC = $(DAEMONS_DIR)/writer2_daemon.cpp
@@ -36,12 +36,12 @@ $(BUILD_DIR):
 # ========================
 # Демоны (с Daemonizer)
 # ========================
-daemons: $(BUILD_DIR) adapter reader_daemon writer1_daemon writer2_daemon logger_daemon
+daemons: $(BUILD_DIR) subs_bus reader_daemon writer1_daemon writer2_daemon logger_daemon
 
-adapter: $(ADAPTER_SRC) $(SHAREDMEM_SRC) $(DAEMONIZER_SRC)
+subs_bus: $(SUBS_SRC) $(SHAREDMEM_SRC) $(DAEMONIZER_SRC)
 	$(CXX) $(CXXFLAGS) -I$(INCLUDE_DIR) \
-		$(ADAPTER_SRC) $(SHAREDMEM_SRC) $(DAEMONIZER_SRC) \
-		-o $(BUILD_DIR)/adapter $(LDFLAGS)
+		$(SUBS_SRC) $(SHAREDMEM_SRC) $(DAEMONIZER_SRC) \
+		-o $(BUILD_DIR)/subs_bus $(LDFLAGS)
 
 reader_daemon: $(READER_DAEMON_SRC) $(SHAREDMEM_SRC) $(DAEMONIZER_SRC) $(LOGGER_SRC)
 	$(CXX) $(CXXFLAGS) -I$(INCLUDE_DIR) \
@@ -118,15 +118,15 @@ free_mem:
 	rm -f /dev/shm/writer_queue1 2>/dev/null || true
 	rm -f /dev/shm/writer_queue2 2>/dev/null || true
 	rm -f /dev/shm/logger_queue 2>/dev/null || true
-	rm -f /dev/shm/adapter 2>/dev/null || true
+	rm -f /dev/shm/subscrribtion_queue 2>/dev/null || true
 
 clean_all: clean free_mem
 
 # ========================
 # Запуск в foreground (для отладки)
 # ========================
-run_adapter_fg: ./build/adapter
-	$(BUILD_DIR)/adapter --foreground
+run_subs_bus_fg: ./build/subs_bus
+	$(BUILD_DIR)/subs_bus --foreground
 
 run_reader_daemon_fg: ./build/reader_daemon
 	$(BUILD_DIR)/reader_daemon --foreground
@@ -158,5 +158,5 @@ install_dirs:
 	chmod 666 /var/log/shared_memory.log
 
 .PHONY: all daemons examples examples_sub tools clean free_mem install_dirs clean_all \
-        run_adapter_fg run_reader_daemon_fg run_writer1_daemon_fg run_writer2_daemon_fg run_logger_daemon_fg \
+        run_subs_bus_fg run_reader_daemon_fg run_writer1_daemon_fg run_writer2_daemon_fg run_logger_daemon_fg \
         run_reader_example run_writer1_example run_writer2_example

@@ -1,5 +1,4 @@
 .vscode
 build/
-*.log
-*.log.dumb
-*.json
+*.log*
+*.json*

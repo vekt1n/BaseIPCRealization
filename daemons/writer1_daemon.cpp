@@ -108,6 +108,11 @@ int main(int argc, char* argv[]) {
         // Логируем локально и отправляем в централизованный логгер
         logger.log(LogLevel::INFO, "Writer1", message_str);
         writer.publishMessage(message_str, "log");
+        writer.publishMessage("ERROR", "error");
+        writer.publishMessage("INFO", "info");
+        writer.publishMessage("FATAL", "fatal");
+        writer.publishMessage("WARNING", "warn");
+        writer.publishMessage("DEBUG", "debug");
         
         // Ждем указанный интервал
         for (int i = 0; i < interval && writer1_running; ++i) {

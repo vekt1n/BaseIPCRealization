@@ -92,10 +92,10 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     
-    // Подписываемся на тег "log" через Adapter
-    res = logger_queue.openConnection("/adapter");
+    // Подписываемся на тег "log" через subscrribtion
+    res = logger_queue.openConnection("/subscrribtion_queue");
     if (!res.result) {
-        std::cerr << "Failed to connect to adapter: " << res.message << std::endl;
+        std::cerr << "Failed to connect to subscrribtion: " << res.message << std::endl;
         // Продолжаем работу — можем получать прямые сообщения
     } else {
         // Подписываемся на логи всех уровней
@@ -108,7 +108,7 @@ int main(int argc, char* argv[]) {
         logger_queue.closeConnection();
         
         if (foreground_mode) {
-            std::cout << "Subscribed to log tags via Adapter\n";
+            std::cout << "Subscribed to log tags via subscrribtion\n";
         }
     }
     
@@ -141,7 +141,7 @@ int main(int argc, char* argv[]) {
     logger.dumpToFile(log_file + ".dump");
     
     // Отписываемся при выходе
-    res = logger_queue.openConnection("/adapter");
+    res = logger_queue.openConnection("/subscrribtion_queue");
     if (res.result) {
         logger_queue.sendMessage("unsub_to log");
         logger_queue.sendMessage("unsub_to info");

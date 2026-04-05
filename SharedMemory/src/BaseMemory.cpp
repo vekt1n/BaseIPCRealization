@@ -331,7 +331,7 @@ Result BaseMemory::publishMessage(const char* message, const char* tag) {
     mess.sender = shm_name;
     mess.tag = tag;
     
-    Result res = openConnection("/adapter");
+    Result res = openConnection("/subscrribtion_queue");
     if (!res.result) {
         return res;
     }

@@ -28,10 +28,10 @@ private:
     std::map<std::string, DaemonInfo> daemons;
     std::string build_dir;
     
-    // Порядок запуска: adapter первый, затем logger, reader, writers
-    std::vector<std::string> start_order = {"adapter", "logger", "reader", "writer1", "writer2"};
+    // Порядок запуска: subs_bus первый, затем logger, reader, writers
+    std::vector<std::string> start_order = {"subs_bus", "logger", "reader", "writer1", "writer2"};
     // Порядок остановки: обратный
-    std::vector<std::string> stop_order = {"writer2", "writer1", "reader", "logger", "adapter"};
+    std::vector<std::string> stop_order = {"writer2", "writer1", "reader", "logger", "subs_bus"};
     
     bool file_exists(const std::string& path) {
         std::ifstream f(path);
@@ -74,11 +74,11 @@ private:
     
 public:
     IPCManager(const std::string& build_path = "./build") : build_dir(build_path) {
-        // Adapter — центральный компонент, запускается первым
-        daemons["adapter"] = {
-            "Subscription Adapter",
-            build_dir + "/adapter",
-            "/tmp/adapter.pid",
+        // subs_bus — центральный компонент, запускается первым
+        daemons["subs_bus"] = {
+            "Subscription subs_bus",
+            build_dir + "/subs_bus",
+            "/tmp/subs_bus.pid",
             "",
             3
         };
@@ -320,13 +320,13 @@ public:
         // Очищаем shared memory
         std::cout << "\nCleaning up shared memory...\n";
         system("rm -f /dev/shm/*queue* 2>/dev/null");
-        system("rm -f /dev/shm/adapter 2>/dev/null");
+        // system("rm -f /dev/shm/subscrribtion_queue 2>/dev/null");
         
         std::cout << "\nAll daemons stopped!\n";
     }
     
     void show_help() {
-        std::cout << "IPC Manager - Control IPC daemons with Subscription Adapter\n";
+        std::cout << "IPC Manager - Control IPC daemons with Subscription subs_queue\n";
         std::cout << "Usage: ipc_manager <command> [daemon] [options]\n";
         std::cout << "\nCommands:\n";
         std::cout << "  start [daemon]    Start daemon (or all if no daemon specified)\n";
@@ -335,11 +335,11 @@ public:
         std::cout << "  status [-d]       Show status of all daemons (-d for details)\n";
         std::cout << "  cleanup           Clean up shared memory and PID files\n";
         std::cout << "  help              Show this help\n";
-        std::cout << "\nDaemons: adapter, logger, reader, writer1, writer2, all\n";
+        std::cout << "\nDaemons: subs_queue, logger, reader, writer1, writer2, all\n";
         std::cout << "\nExamples:\n";
         std::cout << "  ipc_manager start           # Start all daemons\n";
         std::cout << "  ipc_manager stop             # Stop all daemons\n";
-        std::cout << "  ipc_manager start adapter    # Start only adapter\n";
+        std::cout << "  ipc_manager start subs_queue    # Start only subs_queue\n";
         std::cout << "  ipc_manager status           # Show status\n";
         std::cout << "  ipc_manager status -d        # Show detailed status\n";
     }
@@ -354,10 +354,10 @@ public:
         }
         
         system("rm -f /tmp/*_daemon*.pid 2>/dev/null");
-        system("rm -f /tmp/adapter.pid 2>/dev/null");
+        system("rm -f /tmp/subs_queue.pid 2>/dev/null");
         system("rm -f /tmp/*.err 2>/dev/null");
         system("rm -f /dev/shm/*queue* 2>/dev/null");
-        system("rm -f /dev/shm/adapter 2>/dev/null");
+        // system("rm -f /dev/shm/subscription_queue 2>/dev/null");
         system("rm -f /dev/shm/sem.* 2>/dev/null");
         
         std::cout << "Cleanup completed!\n";

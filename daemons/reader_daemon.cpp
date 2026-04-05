@@ -69,10 +69,10 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     
-    // Подписываемся на нужный тег через Adapter
-    res = reader.openConnection("/adapter");
+    // Подписываемся на нужный тег через subs_bus
+    res = reader.openConnection("/subscrribtion_queue");
     if (!res.result) {
-        logger.log(LogLevel::ERROR, "Reader", "Failed to connect to adapter: " + res.message);
+        logger.log(LogLevel::ERROR, "Reader", "Failed to connect to subs_bus: " + res.message);
         Daemonizer::cleanupPidFile(pid_file);
         return 1;
     }
@@ -121,7 +121,7 @@ int main(int argc, char* argv[]) {
     }
     
     // Отписываемся при выходе
-    res = reader.openConnection("/adapter");
+    res = reader.openConnection("/subscrribtion_queue");
     if (res.result) {
         std::string unsub_cmd = "unsub_to " + subscribe_tag;
         reader.sendMessage(unsub_cmd.c_str());

@@ -33,7 +33,7 @@ int main(int argc, char* argv[]) {
         } else if (strcmp(argv[i], "--tag") == 0 && i + 1 < argc) {
             publish_tag = argv[++i];
         } else if (strcmp(argv[i], "--help") == 0) {
-            std::cout << "Writer1 Daemon - publishes messages via Adapter\n"
+            std::cout << "Writer1 Daemon - publishes messages via subs_bus\n"
                       << "Usage: " << argv[0] << " [options]\n"
                       << "Options:\n"
                       << "  --foreground       Run in foreground (not as daemon)\n"
@@ -95,7 +95,7 @@ int main(int argc, char* argv[]) {
         
         std::string message_str = msg.str();
         
-        // Публикуем сообщение через Adapter с тегом
+        // Публикуем сообщение через subs_bus с тегом
         res = writer.publishMessage(message_str, publish_tag);
         
         if (!res.result && foreground_mode) {
